@@ -21,8 +21,7 @@ void waitForEnterOrEsc();
 void userSettings();
 void displayScheduleTable(const Table& table);
 void displayScheduleMenu();
-void showMainMenu(int selectedOption = 1);
-int navigateMenu(const vector<string>& options, int selectedOption = 1);
+void mainMenu();
 void generateSchedule();
 void modifySchedule();
 int navigateSchedules(const vector<int>& schedules);
@@ -31,5 +30,7 @@ vector<int> searchSchedules(const string& userName, int year, Semester semester,
 void displayLectureList(const Table& table);
 int navigateLectures(const vector<Course>& lectures);
 void displayCurrentSchedule(const Table& table);
+
+
 
 #endif 

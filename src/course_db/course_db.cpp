@@ -2,6 +2,7 @@
 #include "parser.h"
 #include <algorithm>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -67,18 +68,21 @@ CourseDatabase::CourseDatabase()
 
 void CourseDatabase::load()
 {
-    load_courses();
-    load_date_index();
-    load_name_index();
+    load_db_version();
+    int course_version = load_courses();
+    load_date_index(course_version != version);
+    load_name_index(course_version != version);
+    update_db_version(course_version);
 }
 
-void CourseDatabase::load_courses()
+int CourseDatabase::load_courses()
 {
-    std::ifstream file("courses.txt");
+    int course_version = 0;
+    std::fstream file = open_file("courses.txt");
     if (!file.is_open())
     {
         std::cout << "Failed to open courses.txt" << std::endl;
-        return;
+        return course_version;
     }
 
     size_t current_line = 0;
@@ -88,14 +92,16 @@ void CourseDatabase::load_courses()
         try
         {
             std::string::const_iterator pt = line_str.begin();
-            ParseResult result = parse_tag(pt, line_str.end());
-            if (result.tag == "course")
+            ParseResult tag = parse_tag(pt, line_str.end());
+            if (tag == "course")
             {
-                Course course(result.value);
+                Course course(tag.value);
                 int id = course.get_id();
                 course_by_id[id] = course;
                 course_ptrs.insert(&course_by_id[id]);
             }
+            else if (tag == "db_version")
+                course_version = std::stoi(tag.value);
         }
         catch (const std::exception &e)
         {
@@ -104,6 +110,7 @@ void CourseDatabase::load_courses()
         current_line++;
     }
     file.close();
+    return course_version;
 }
 
 /*
@@ -119,11 +126,11 @@ indexing_by_date format
 </index>
 */
 
-void CourseDatabase::load_date_index()
+void CourseDatabase::load_date_index(bool is_update)
 {
-    std::ifstream file("date_index.txt");
+    std::fstream file = open_cache("date_index.txt");
 
-    if (!file.is_open())
+    if (!file.is_open() || is_update)
     {
         file.close();
         indexing_by_date();
@@ -183,8 +190,7 @@ void CourseDatabase::indexing_by_date()
         }
     }
 
-    std::ofstream file("date_index.txt");
-
+    std::ofstream file = write_cache("date_index.txt");
     std::string raw_value;
     for (auto index : date_index)
     {
@@ -202,7 +208,6 @@ void CourseDatabase::indexing_by_date()
         file << raw_value << std::endl;
         raw_value.clear();
     }
-
     file.close();
 }
 
@@ -226,7 +231,7 @@ void CourseDatabase::indexing_by_name()
             name_index[token].insert(&course);
     }
 
-    std::ofstream file("name_index.txt", std::ios::binary);
+    std::ofstream file = write_cache("name_index.txt");
     std::string raw_value;
     for (const auto &element : name_index)
     {
@@ -246,11 +251,11 @@ void CourseDatabase::indexing_by_name()
     file.close();
 }
 
-void CourseDatabase::load_name_index()
+void CourseDatabase::load_name_index(bool is_update)
 {
-    std::ifstream file("name_index.txt");
+    std::fstream file = open_cache("name_index.txt");
 
-    if (!file.is_open())
+    if (!file.is_open() || is_update)
     {
         file.close();
         indexing_by_name();
@@ -292,6 +297,42 @@ void CourseDatabase::load_name_index()
         }
     }
 
+    file.close();
+}
+
+void CourseDatabase::load_db_version()
+{
+    std::fstream file = open_cache("course_db.txt");
+
+    if (!file.is_open())
+    {
+        file.close();
+        {
+            std::ofstream file = write_cache("course_db.txt");
+            std::string data = "<version>" + std::to_string(0) + "</version>";
+            file << data << std::endl;
+            file.close();
+        }
+        return;
+    }
+
+    std::string line;
+    while (std::getline(file, line))
+    {
+        std::string::const_iterator it = line.begin();
+        ParseResult tag = parse_tag(it, line.end());
+        if (tag == "version")
+            version = std::stoi(tag.value);
+    }
+
+    return;
+}
+
+void CourseDatabase::update_db_version(int version)
+{
+    std::ofstream file = write_cache("course_db.txt");
+    std::string data = "<version>" + std::to_string(version) + "</version>";
+    file << data << std::endl;
     file.close();
 }
 
@@ -373,4 +414,34 @@ std::vector<Course> CourseDatabase::query(CourseQuery condition) const
     }
 
     return result;
+}
+
+std::fstream CourseDatabase::open_cache(std::string filename)
+{
+    std::string directory = "course_db_cache/";
+    std::string filepath = directory + filename;
+
+    if (!std::filesystem::exists(directory))
+        std::filesystem::create_directory(directory);
+
+    std::fstream file(filepath, std::ios::in | std::ios::out);
+    return file;
+}
+
+std::ofstream CourseDatabase::write_cache(std::string filename)
+{
+    std::string directory = "course_db_cache/";
+    std::string filepath = directory + filename;
+
+    if (!std::filesystem::exists(directory))
+        std::filesystem::create_directory(directory);
+
+    std::ofstream file(filepath);
+    return file;
+}
+
+std::fstream CourseDatabase::open_file(std::string filename)
+{
+    std::fstream file(filename);
+    return file;
 }

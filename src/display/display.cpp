@@ -1,6 +1,11 @@
 #include "display.h"
 #include "schedule_management.h"
 #include "user.h"
+#include "course.h"
+#include "table.h"
+#include "table_db.h"
+#include "course_db.h"
+#include "parser.h"
 #include <algorithm>
 #include <conio.h>
 #include <cstdlib>
@@ -12,6 +17,7 @@
 #include <vector>
 
 using namespace std;
+TableDatabase tableDatabase;
 
 User current_user;
 
@@ -44,6 +50,64 @@ void waitForEnterOrEsc()
             {
                 throw runtime_error(" Back ");
             }
+        }
+    }
+}
+
+void mainMenu()
+{
+    TableDatabase tableDatabase;
+    if (!tableDatabase.get_tables().empty())
+    {
+        displayScheduleTable(tableDatabase.get_tables()[0]);
+    }
+    int selectedOption = 1;
+    while (true)
+    {
+        system("cls");
+        cout << "\n==================================================================================" << endl;
+        cout << "[Chung-Ang University Schedule Management System]" << endl;
+        cout << "==================================================================================" << endl;
+        string options[] = {" 1. User Settings", " 2. Schedule", " 3. Exit"};
+        for (int i = 0; i < 3; ++i)
+        {
+            if (i + 1 == selectedOption)
+            {
+                cout << "> " << options[i] << endl;
+            }
+            else
+            {
+                cout << "  " << options[i] << endl;
+            }
+        }
+        cout << "==================================================================================" << endl;
+
+        char key = _getch();
+        if (key == 13)
+        {
+            switch (selectedOption)
+            {
+            case 1:
+                userSettings();
+                break;
+            case 2:
+                if (!tableDatabase.get_tables().empty())
+                {
+                    displayScheduleTable(tableDatabase.get_tables()[0]);
+                }
+                break;
+            case 3:
+                cout << "Exiting the program." << endl;
+                return;
+            }
+        }
+        else if (key == 72)
+        {
+            selectedOption = (selectedOption == 1) ? 3 : selectedOption - 1;
+        }
+        else if (key == 80)
+        {
+            selectedOption = (selectedOption == 3) ? 1 : selectedOption + 1;
         }
     }
 }
@@ -160,7 +224,7 @@ void displayScheduleMenu()
                 generateSchedule();
                 break;
             case 2:
-                // modifySchedule();
+                modifySchedule();
                 break;
             case 3:
                 return;
@@ -335,7 +399,6 @@ void generateSchedule()
                             switch (majorChoice)
                             {
                             case 1: {
-                                // Select Major Basics Subjects
                                 while (true)
                                 {
                                     system("cls");
@@ -383,7 +446,6 @@ void generateSchedule()
                             }
                             break;
                             case 2: {
-                                // Select Major Courses Subjects
                                 while (true)
                                 {
                                     system("cls");
@@ -431,7 +493,6 @@ void generateSchedule()
                             }
                             break;
                             case 3: {
-                                // Select Major Requirements Subjects
                                 while (true)
                                 {
                                     system("cls");
@@ -570,7 +631,6 @@ void generateSchedule()
                             }
                             break;
                             case 2: {
-                                // Select Core - Challenge Subjects
                                 while (true)
                                 {
                                     system("cls");
@@ -621,9 +681,6 @@ void generateSchedule()
                             break;
                             case 3: {
                                 // Select Core - Creativity Subjects (To be implemented)
-                                // while (true) {
-                                //     // Subject selection logic here
-                                // }
                             }
                             break;
                             }
@@ -678,7 +735,6 @@ void generateSchedule()
                 vector<Weekday> selectedDays;
                 vector<int> selectedPeriods;
 
-                // Select free days
                 while (true)
                 {
                     system("cls");
@@ -708,7 +764,6 @@ void generateSchedule()
                     selectedDays.push_back(static_cast<Weekday>(day - 1));
                 }
 
-                // Select free periods
                 while (true)
                 {
                     system("cls");
@@ -760,103 +815,49 @@ void generateSchedule()
     }
 }
 
-
-
-
-
-
-/* void modifySchedule()
+void modifySchedule()
 {
     try
     {
         system("cls");
-        cout << "\n시간표 검색 및 수정" << endl;
-        cout << "필요한 정보만을 입력 후, 검색할 시간표를 확인하세요." << endl;
+        cout << "\nSearch and Modify Schedule" << endl;
+        cout << "Enter the necessary information to view the schedules to search." << endl;
 
-        string userName = getInput("사용자 이름 (입력하지 않으면 전체 검색): ");
-        int year = getOptionalIntInput("학년 (1-4, 입력하지 않으면 전체 검색): ", 1, 4);
-        Semester semester =
-            getOptionalSemesterInput("학기 (1: 봄, 2: 여름, 3: 가을, 4: 겨울, 입력하지 않으면 전체 검색): ");
-        int scheduleID = getOptionalIntInput("시간표 ID (입력하지 않으면 전체 검색): ", 0, 9999);
+        string userName = getInput("User Name (leave blank for all searches): ");
+        int year = getOptionalIntInput("Year (1-4, leave blank for all searches): ", 1, 4);
+        Semester semester = getOptionalSemesterInput(
+            "Semester (1: Spring, 2: Summer, 3: Fall, 4: Winter, leave blank for all searches): ");
+        int scheduleID = getOptionalIntInput("Schedule ID (leave blank for all searches): ", 0, 9999);
 
-        vector<Table> foundSchedules = tableDatabase.queryTables(userName, year, semester, scheduleID);
+        vector<Table> foundSchedules =
+            tableDatabase.query({to_string(scheduleID), semester, year == -1 ? "" : to_string(year), "", userName});
+
         if (foundSchedules.empty())
         {
-            cout << "조건에 맞는 시간표가 없습니다. 다시 검색해주세요." << endl;
+            cout << "No schedules found matching the criteria. Please try again." << endl;
             waitForEnterOrEsc();
             return;
         }
 
-        // 검색된 시간표 목록을 사용자에게 출력
-        cout << "\n검색된 시간표 목록:" << endl;
-        int index = 1;
-        for (const Table &table : foundSchedules)
+        cout << "\nList of Found Schedules:" << endl;
+        for (size_t i = 0; i < foundSchedules.size(); ++i)
         {
-            cout << index << ") 시간표 ID: " << table.get_id() << ", 학년: " << table.get_year()
-                 << ", 학기: " << encodeSemester(table.get_semester()) << ", 사용자 이름: " << table.get_user_name()
-                 << endl;
-            index++;
+            cout << i + 1 << ") Schedule ID: " << foundSchedules[i].get_id()
+                 << ", Year: " << foundSchedules[i].get_year()
+                 << ", Semester: " << encode_semester(foundSchedules[i].get_semester())
+                 << ", User Name: " << foundSchedules[i].get_user_id() << endl;
         }
 
-        int selectedScheduleIndex = navigateMenu(foundSchedules.size());
-        if (selectedScheduleIndex == -1)
-        {
-            return;
-        }
-
-        modifySelectedSchedule(foundSchedules[selectedScheduleIndex - 1].get_id());
+        int selectedScheduleIndex =
+            getOptionalIntInput("Select a schedule to modify (number): ", 1, foundSchedules.size()) - 1;
+        modifySelectedSchedule(foundSchedules[selectedScheduleIndex].get_id());
     }
     catch (runtime_error &)
     {
-        cout << "시간표 수정을 취소하였습니다.\n" << endl;
+        cout << "Schedule modification cancelled." << endl;
     }
 }
 
-// Function to navigate through menu options
-int navigateMenu(const vector<string> &options, int selectedOption)
-{
-    while (true)
-    {
-        system("cls");
-        cout << "\n옵션을 선택해주세요:" << endl;
-        for (int i = 0; i < options.size(); ++i)
-        {
-            if (i + 1 == selectedOption)
-            {
-                cout << "-> " << options[i] << endl;
-            }
-            else
-            {
-                cout << "   " << options[i] << endl;
-            }
-        }
-
-        char input = getch();
-        switch (input)
-        {
-        case 'w': // 위로 이동
-            if (selectedOption > 1)
-            {
-                selectedOption--;
-            }
-            break;
-        case 's': // 아래로 이동
-            if (selectedOption < options.size())
-            {
-                selectedOption++;
-            }
-            break;
-        case '\r': // 선택 (Enter 키)
-            return selectedOption;
-        case 27: // ESC 키로 뒤로가기
-            return -1;
-        default:
-            break;
-        }
-    }
-}
-
-// Function to get input from the user
 string getInput(const string &prompt)
 {
     cout << prompt;
@@ -865,7 +866,6 @@ string getInput(const string &prompt)
     return input;
 }
 
-// Function to get optional integer input with validation
 int getOptionalIntInput(const string &prompt, int min, int max)
 {
     string input = getInput(prompt);
@@ -882,18 +882,17 @@ int getOptionalIntInput(const string &prompt, int min, int max)
         }
         else
         {
-            cout << "입력값이 범위를 벗어났습니다." << endl;
+            cout << "Input value is out of range." << endl;
             return getOptionalIntInput(prompt, min, max);
         }
     }
     catch (...)
     {
-        cout << "올바른 숫자를 입력해주세요." << endl;
+        cout << "Please enter a valid number." << endl;
         return getOptionalIntInput(prompt, min, max);
     }
 }
 
-// Function to get optional semester input
 Semester getOptionalSemesterInput(const string &prompt)
 {
     string input = getInput(prompt);
@@ -910,36 +909,37 @@ Semester getOptionalSemesterInput(const string &prompt)
         }
         else
         {
-            cout << "올바른 학기를 입력해주세요." << endl;
+            cout << "Please enter a valid semester." << endl;
             return getOptionalSemesterInput(prompt);
         }
     }
     catch (...)
     {
-        cout << "올바른 학기를 입력해주세요." << endl;
+        cout << "Please enter a valid semester." << endl;
         return getOptionalSemesterInput(prompt);
     }
 }
 
-// Function to modify a selected schedule
 void modifySelectedSchedule(int scheduleID)
 {
-    Table *selectedSchedule = tableDatabase.getTableById(scheduleID);
+    Table *selectedSchedule = &tableDatabase.get_tables()[scheduleID - 1];
     if (!selectedSchedule)
     {
-        cout << "시간표를 찾을 수 없습니다." << endl;
+        cout << "Schedule not found." << endl;
         return;
     }
     displayLectureList(*selectedSchedule);
 
-    vector<string> editOptions = {" 1. 메인 시간표 지정 ", " 2. 시간표 삭제 ", " 3. 시간표 수정 ", " 4. 뒤로가기 "};
-    int editChoice = navigateMenu(editOptions);
+    int editChoice = 1;
+
+    cout << " \n1. Set as Main Schedule\n2. Delete Schedule\n3. Modify Schedule\n4. Return to Menu " << endl;
+    cin >> editChoice;
 
     switch (editChoice)
     {
     case 1:
-        tableDatabase.setMainSchedule(scheduleID);
-        cout << "메인 시간표로 지정되었습니다." << endl;
+        // setMainSchedule(scheduleID);
+        cout << "Set as main schedule." << endl;
         break;
     case 2:
         deleteSchedule(scheduleID);
@@ -950,32 +950,32 @@ void modifySelectedSchedule(int scheduleID)
     case 4:
         return;
     default:
-        cout << "잘못된 입력입니다." << endl;
+        cout << "Invalid input." << endl;
         break;
     }
 }
 
-// Function to delete a schedule
 void deleteSchedule(int scheduleID)
 {
-    if (tableDatabase.removeTable(scheduleID))
+    try
     {
-        cout << "시간표가 삭제되었습니다." << endl;
+        tableDatabase.remove(scheduleID);
+        cout << "Schedule has been deleted." << endl;
     }
-    else
+    catch (const std::exception &e)
     {
-        cout << "시간표 삭제에 실패하였습니다." << endl;
+        cout << "Failed to delete schedule: " << e.what() << endl;
     }
     waitForEnterOrEsc();
 }
 
-// Function to modify an existing schedule
 void modifyExistingSchedule(Table &selectedSchedule)
 {
     while (true)
     {
-        vector<string> modifyOptions = {"1. 강의 추가", "2. 강의 삭제", "3. 완료"};
-        int modifyChoice = navigateMenu(modifyOptions);
+        int modifyChoice = 1;
+        cout << "\n1. Add Lecture\n2. Delete Lecture\n3. Exit" << endl;
+        cin >> modifyChoice;
 
         switch (modifyChoice)
         {
@@ -988,55 +988,103 @@ void modifyExistingSchedule(Table &selectedSchedule)
         case 3:
             return;
         default:
-            cout << "잘못된 입력입니다." << endl;
+            cout << "Invalid input." << endl;
             break;
         }
     }
 }
 
-// Function to add a lecture to a schedule
 void addLectureToSchedule(Table &schedule)
 {
-    cout << "\n추가할 강의 정보를 입력해주세요." << endl;
-    string lectureName = getInput("강의명: ");
-    int lectureDay = getOptionalIntInput("강의 요일 (1: 월요일, 2: 화요일, ... 5: 금요일): ", 1, 5);
-    int lecturePeriod = getOptionalIntInput("강의 교시 (1-12): ", 1, 12);
+    cout << "Enter the lecture information to add." << endl;
+    string lectureName = getInput("Lecture Name: ");
+    string professorName = getInput("Professor Name: ");
+    int credits = getOptionalIntInput("Credits (1-5): ", 1, 5);
+    int lectureDay =
+        getOptionalIntInput("Lecture Day (1: Monday, 2: Tuesday, 3: Wednesday, 4: Thursday, 5: Friday): ", 1, 5);
+    int lecturePeriod = getOptionalIntInput("Lecture Period (1-12): ", 1, 12);
 
-    Course newCourse(lectureName, static_cast<Weekday>(lectureDay - 1), lecturePeriod);
-    if (schedule.addCourse(newCourse))
+    vector<CourseTime> times = {CourseTime{static_cast<Weekday>(lectureDay - 1), lecturePeriod}};
+    string encodedCourseInfo = lectureName + "|" + professorName + "|" + to_string(credits);
+    Course newCourse(encodedCourseInfo);
+
+    if (isLectureAlreadyAdded(schedule, newCourse))
     {
-        cout << "강의가 성공적으로 추가되었습니다." << endl;
+        cout << "The lecture is already added." << endl;
+    }
+    else if (isTimeConflict(schedule, newCourse))
+    {
+        cout << "There is a time conflict in the schedule." << endl;
     }
     else
     {
-        cout << "강의 추가에 실패하였습니다." << endl;
+        schedule.insert_course(newCourse);
+        cout << "Lecture added successfully." << endl;
     }
     waitForEnterOrEsc();
 }
 
-// Function to delete a lecture from a schedule
+bool isLectureAlreadyAdded(const Table &schedule, const Course &newCourse)
+{
+    for (const auto &course : schedule.get_course())
+    {
+        if (course.get_name() == newCourse.get_name() && course.get_professor() == newCourse.get_professor())
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool isTimeConflict(const Table &schedule, const Course &newCourse)
+{
+    for (const auto &course : schedule.get_course())
+    {
+        for (const auto &newTime : newCourse.get_times())
+        {
+            for (const auto &existingTime : course.get_times())
+            {
+                if (newTime.weekday == existingTime.weekday && newTime.time == existingTime.time)
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 void deleteLectureFromSchedule(Table &schedule)
 {
-    cout << "\n삭제할 강의명을 입력해주세요." << endl;
-    string lectureName = getInput("강의명: ");
-    if (schedule.removeCourse(lectureName))
+    cout << "Enter the name of the lecture to delete." << endl;
+    string lectureName = getInput("Lecture Name: ");
+    Course *course = nullptr;
+    for (Course &c : schedule.get_course())
     {
-        cout << "강의가 성공적으로 삭제되었습니다." << endl;
+        if (c.get_name() == lectureName)
+        {
+            course = &c;
+            break;
+        }
+    }
+    if (!course)
+    {
+        cout << "Lecture not found." << endl;
     }
     else
     {
-        cout << "강의 삭제에 실패하였습니다." << endl;
+        schedule.remove_course(*course);
+        cout << "Lecture deleted successfully." << endl;
     }
     waitForEnterOrEsc();
 }
 
-// Function to display the lecture list of a schedule
 void displayLectureList(const Table &table)
 {
-    cout << "\n선택한 시간표(ID: " << table.get_id() << ")의 현재 강의 목록입니다:" << endl;
-    cout << "번호 | 강의명         | 교수명      | 학점 | 요일/교시" << endl;
+    cout << "\nCurrent lecture list of the selected schedule (ID: " << table.get_id() << "):" << endl;
+    cout << "No. | Lecture Name   | Professor   | Credits | Day/Period" << endl;
     cout << "-----------------------------------------------------------------" << endl;
-    const auto &courses = table.get_courses();
+    const auto &courses = table.get_course();
     for (size_t i = 0; i < courses.size(); ++i)
     {
         const Course &course = courses[i];
@@ -1044,9 +1092,9 @@ void displayLectureList(const Table &table)
              << course.get_professor() << " | " << setw(4) << course.get_grade() << " | ";
         for (const auto &time : course.get_times())
         {
-            cout << encodeWeekday(time.weekday) << "/" << time.time << "  ";
+            cout << encode_weekday(time.weekday) << "/" << time.time << "  ";
         }
         cout << endl;
     }
     waitForEnterOrEsc();
-}*/
+}
